@@ -281,7 +281,7 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
     window = (tt1[1], tt1[1]+60*10)
     with_theme(plot_theme) do
         fig = Figure(size=(1200,600))
-        ax = Axis(fig[1,1],ypanlock=true,xzoomlock=true)
+        ax = Axis(fig[1,1],ypanlock=true,yzoomlock=true)
         for (b1,b2) in zip(bidx[1:end-1], bidx[2:end])
             lines!(ax, tt1[b1+1:b2], X[b1+1:b2],color=:gray)
         end
