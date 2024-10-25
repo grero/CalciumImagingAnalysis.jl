@@ -310,6 +310,17 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
         #minorticklabels = [["+$(k)min" for k in 1:length(_tt)] for _tt in minorticks] 
         #@show minorticklabels
         #ax.xminorticks = ([minorticks...,],[minorticklabels...,])
+        ax2 = Axis(fig[1,2])
+        linkyaxes!(ax, ax2)
+        #lines!(ax2, hp.weights, hp.edges[1][1:end-1],color=_colors[1])
+        #lines!(ax2, hn.weights, hn.edges[1][1:end-1],color=_colors[2])
+        y = evalues[event_type.=="Left"] 
+        rainclouds!(ax2, fill(1.0, length(y)),y,color=_colors[1],markersize=5px,plot_boxplots=false,gap=0.3)
+        y = evalues[event_type.=="Right"] 
+        rainclouds!(ax2, fill(2.0, length(y)),y,color=_colors[2], markersize=5px, plot_boxplots=false, gap=0.3)
+        ax2.xticklabelsvisible = false
+        colsize!(fig.layout, 2, Relative(0.05))
+        ax2.yticklabelsvisible = false
         if do_animate
             if moviefile !== nothing
                 record(fig, moviefile, 1:length(tt1)-600) do i
