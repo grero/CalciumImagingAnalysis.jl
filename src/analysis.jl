@@ -304,6 +304,7 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
                               _etypes, tellwidth=false, tellheight=false, valign=:top, 
                               halign=:left,framevisible=true,margin=(10,10,10,10))
 
+        ax.ylabel = "Decision function"
         #ax.xticks = (tt1[bidx[1:end-1].+1], string.(tt0[bidx[1:end-1].+1]))
         ax.xticks = (xtickpositions, xticklabels)
         #minorticklabels = [["+$(k)min" for k in 1:length(_tt)] for _tt in minorticks] 
