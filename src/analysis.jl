@@ -270,6 +270,90 @@ function plot_decoder(lda, Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
 
 end
 
+function extract_event(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event::Vector{ZonedDateTime}) where T <: Real
+    evalues = zeros(T, length(event))
+    for (ii,ee) in enumerate(event)
+        idx = searchsortedfirst(timestamps, ee)
+        evalues[ii] = X[idx]
+    end
+    evalues
+end
+
+function compress_time(timestamps::Vector{ZonedDateTime}, event::Vector{ZonedDateTime},Δt::Period)
+    breaks = findall(diff(timestamps).>Δt)
+    _timestamps = copy(timestamps)
+    _event = copy(event)
+    for b in breaks
+        _Δt=Δt - (_timestamps[b+1]-_timestamps[b])
+        _timestamps[b+1:end] .+= _Δt
+        # also shift the events
+        eidx = _event .>= _timestamps[b+1] 
+        _event[eidx] .+= _Δt
+    end 
+    _timestamps, _event
+end
+
+function plot_evalues(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event_time::Vector{ZonedDateTime}, event_type::AbstractVector{T2}) where T <: Real where T2
+    evalues = extract_event(X, timestamps, event_time)
+    breaks = findall(diff(timestamps).>Second(5))  
+    bidx = [0;breaks;length(timestamps)]
+    # one axis for each break
+    naxes = length(breaks)+1
+    uc = Makie.UnitfulConversion(Makie.automatic; units_in_label=false)
+    with_theme(plot_theme) do
+        fig = Figure()
+        #axes = [Axis(fig[1,i],xtickformat="{:.1f}min") for i in 1:naxes]
+        axes = [Axis(fig[1,i];dim1_conversion=uc) for i in 1:naxes]
+        linkyaxes!(axes...)
+        for (ii,ax) in enumerate(axes)
+            idx0 = searchsortedfirst(event_time, timestamps[bidx[ii]+1])
+            idx1 = searchsortedlast(event_time, timestamps[bidx[ii+1]])
+            if ii > 1
+                ax.leftspinevisible = false
+                ax.yticksvisible = false
+                ax.yticklabelsvisible = false
+            else
+                ax.ylabel = "Decision value"
+            end
+            if ii == 1
+                show_legend = true
+                ax.xlabel = "Time from start (s)"
+            else
+                show_legend = false
+            end
+            plot_evalues!(ax, evalues[idx0:idx1], event_time[idx0:idx1] .- timestamps[bidx[ii]+1], event_type[idx0:idx1];show_legend=show_legend)
+        end
+        fig
+    end
+end
+
+function plot_evalues!(ax, evalues::Vector{T}, timestamps::Vector{TP},etype::AbstractVector{T2};show_legend=false) where T <: Real where T2 where TP <: Period
+
+    _colors = Makie.wong_colors()
+    #_etypes = unique(etype)
+    #etypes = sort(_etypes,by=a->length(a))
+    etypes = ["Left","Right"]
+    event_color = fill(_colors[1], length(etype))
+    for (i,et) in enumerate(etypes[2:end])
+        event_color[etype.==et] .= _colors[i+1]
+    end
+    with_theme(plot_theme) do
+        scatter!(ax, timestamps, evalues, color=event_color) 
+        hlines!(ax, 0.0, linestyle=:dot, color=:black)
+        if show_legend
+            axislegend(ax, [MarkerElement(marker=:circle, color=c) for c in _colors[1:length(etypes)]],
+                                etypes, tellwidth=false, tellheight=false, valign=:top, 
+                                halign=:left,framevisible=true,margin=(10,10,10,0),
+                                padding=(5.0, 5.0, 5.0, 5.0))
+        end
+        # override ticks
+        #ax.xaxis.ticklabels[] = [replace(xt, "minute"=>"min") for xt in xticklabels] 
+        #@show ax.xaxis.ticklabels[]
+        #@show xticklabels xtickvalues
+        fig
+    end
+end
+
 function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event::Vector{ZonedDateTime}, event_type::AbstractVector{T2};do_animate=false,animation_speed=1,moviefile::Union{String,Nothing}=nothing) where T <: Real where T2
     _etypes = unique(event_type)
     _etypes = sort(_etypes,by=a->length(a))
