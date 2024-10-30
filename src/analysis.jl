@@ -461,6 +461,31 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
     end
 end
 
+function plot_poke_behaviour(pokes)
+    all_poke_times = [pokes.rewarded_poke_time;pokes.unrewarded_poke_time]
+    all_poke_types = [pokes.rewarded_poke_type;pokes.unrewarded_poke_type]
+    all_poke_rewarded = [fill(1.0, length(pokes.rewarded_poke_time));fill(0.0, length(pokes.unrewarded_poke_time))]
+    y = fill(0.0, length(all_poke_types))
+    y[all_poke_types.=="Left"] .= 1.0
+    y[all_poke_types.=="Right"] .= -1.0
+    all_poke_color = fill(parse(Colorant, "blue"), length(all_poke_types))
+    all_poke_color[all_poke_rewarded.==0] .= parse(Colorant, "red")
+
+    x = [tt.utc_datetime for tt in all_poke_times]
+    with_theme(plot_theme) do
+        fig = Figure(size=(700,200))
+        ax = Axis(fig[1,1])
+        scatter!(ax, x,y,color=all_poke_color)
+        ax.yticks = ([-1.0, 1.0], ["Right","Left"])
+        ax.yticklabelrotation = π/2
+        axislegend(ax, [MarkerElement(marker=:circle, color=:red),
+                        MarkerElement(marker=:circle, color=:blue)],
+                        ["Incorrect","Correct"],framevisible=true,
+                        padding=10.0, valign=:center)
+        fig
+    end
+end
+
 function animate_timeseries(X::Matrix{T},tevents::Vector{Vector{T2}}, t=1:size(X,2);npoints::Int64=size(X,2),do_animate=false) where T <: Real where T2 <: Real
     with_theme(plot_theme) do
         fig = Figure()
