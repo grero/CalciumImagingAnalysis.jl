@@ -203,6 +203,40 @@ function train_decoder(Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
     lda = fit(LinearDiscriminant, Zp, Zn;covestimator=SimpleCovariance())
 end
 
+function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime}, poke_type::AbstractVector{T2}) where T <: Real where T2
+    # identify breaks
+    breaks = findall(diff(timestamps).>Second(5))
+    bidx = [0;breaks;length(timestamps)]
+    Xd = zeros(T,size(X,2),length(poke_time))
+    Y = fill!(similar(X), zero(T))
+    Y .= X
+    offset = 0
+    for (b1,b2) in zip(bidx[1:end-1], bidx[2:end])
+        _X = X[b1+1:b2,:]
+        pidx0 = searchsortedfirst(poke_time, timestamps[b1+1])
+        pidx1 = searchsortedlast(poke_time, timestamps[b2])
+        Xm,x = alignto(_X, timestamps[b1+1:b2], poke_time[pidx0:pidx1])
+        _X1 = get_per_cell_average(Xm, x, (-Second(1), Second(0)))
+        Xd[:,offset+1:offset+(pidx1-pidx0+1)] = _X1
+        offset += pidx1-pidx0+1
+        # substract mean
+        Y[b1+1:b2,:] .-= mean(X[b1+1:b2,:],dims=1)
+    end
+    # get a subspace spanning 50% (arbitrary)
+    w,s,cc = get_subspace(Xd)
+    w = w[:,1:10]
+    Xp = Xd[:,poke_type.=="Left"]
+    Xn = Xd[:, poke_type.=="Right"] 
+    Zp = w'*Xp
+    Zn = w'*Xn
+    lda = fit(LinearDiscriminant, Zp, Zn)
+    cq_p = predict(lda, Zp)
+    cq_n = predict(lda, Zn)
+    @show mean(cq_p) mean(cq_n.==0)
+    Z = Y*w
+    q = evaluate(lda, permutedims(Z))
+end
+
 function plot_decoder(lda, Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
     qp = evaluate(lda, Zp)
     qn = evaluate(lda, Zn)
