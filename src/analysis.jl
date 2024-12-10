@@ -404,7 +404,9 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
         for (b1,b2) in zip(bidx[1:end-1], bidx[2:end])
             lines!(ax, tt1[b1+1:b2], X[b1+1:b2],color=:gray)
         end
-        vlines!(ax, tt1[breaks],color=:black, linewidth=2.0)
+        if !isempty(breaks)
+            vlines!(ax, tt1[breaks],color=:black, linewidth=2.0)
+        end
         vlines!(ax, et,color=event_color)
         hlines!(ax, 0.0, color=:black, linestyle=:dot)
         minorticks = [(tt1[b1+1]+60):60:tt1[b2] for (b1,b2) in zip(bidx[1:end-1],bidx[2:end])]
