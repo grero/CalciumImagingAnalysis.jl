@@ -364,7 +364,7 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
     _colors = Makie.wong_colors()
     event_color = fill(_colors[1], length(event_type))
     for (i,et) in enumerate(_etypes[2:end])
-        event_color[event_type.==et] .= _colors[i+1]
+        event_color[findall(tt->tt==et, event_type)] .= _colors[i+1]
     end
     # identifiy breaks
     breaks = findall(diff(timestamps).>Second(5))
@@ -439,10 +439,10 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
         #lines!(ax2, hn.weights, hn.edges[1][1:end-1],color=_colors[2])
         unique_type = unique(event_type)
         sort!(unique_type)
-        y = evalues[event_type.==unique_type[1]] 
-        rainclouds!(ax2, fill(1.0, length(y)),y,color=_colors[1],markersize=5px,plot_boxplots=false,gap=0.3)
-        y = evalues[event_type.==unique_type[2]] 
-        rainclouds!(ax2, fill(2.0, length(y)),y,color=_colors[2], markersize=5px, plot_boxplots=false, gap=0.3)
+        for (ii,et) in enumerate(unique_type)
+            y = evalues[findall(tt->tt==et, event_type)] 
+            rainclouds!(ax2, fill(1.0*ii, length(y)),y,color=_colors[ii],markersize=5px,plot_boxplots=false,gap=0.3)
+        end
         ax2.xticklabelsvisible = false
         colsize!(fig.layout, 2, Relative(0.05))
         ax2.yticklabelsvisible = false
