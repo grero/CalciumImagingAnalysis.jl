@@ -224,7 +224,8 @@ function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vect
     end
     # get a subspace spanning 50% (arbitrary)
     w,s,cc = get_subspace(Xd)
-    w = w[:,1:10]
+    jmax = min(10, size(w,2))
+    w = w[:,1:jmax]
     Xp = Xd[:,poke_type.=="Left"]
     Xn = Xd[:, poke_type.=="Right"] 
     Zp = w'*Xp
