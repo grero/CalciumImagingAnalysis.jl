@@ -204,6 +204,8 @@ function train_decoder(Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
 end
 
 function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime}, poke_type::AbstractVector{T2}) where T <: Real where T2
+    unique_pokes = unique(poke_type)
+    sort!(unique_pokes)
     # identify breaks
     breaks = findall(diff(timestamps).>Second(5))
     bidx = [0;breaks;length(timestamps)]
@@ -226,8 +228,8 @@ function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vect
     w,s,cc = get_subspace(Xd)
     jmax = min(10, size(w,2))
     w = w[:,1:jmax]
-    Xp = Xd[:,poke_type.=="Left"]
-    Xn = Xd[:, poke_type.=="Right"] 
+    Xp = Xd[:,poke_type.==unique_pokes[1]]
+    Xn = Xd[:, poke_type.==unique_pokes[2]] 
     Zp = w'*Xp
     Zn = w'*Xn
     lda = fit(LinearDiscriminant, Zp, Zn)
@@ -435,9 +437,11 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
         linkyaxes!(ax, ax2)
         #lines!(ax2, hp.weights, hp.edges[1][1:end-1],color=_colors[1])
         #lines!(ax2, hn.weights, hn.edges[1][1:end-1],color=_colors[2])
-        y = evalues[event_type.=="Left"] 
+        unique_type = unique(event_type)
+        sort!(unique_type)
+        y = evalues[event_type.==unique_type[1]] 
         rainclouds!(ax2, fill(1.0, length(y)),y,color=_colors[1],markersize=5px,plot_boxplots=false,gap=0.3)
-        y = evalues[event_type.=="Right"] 
+        y = evalues[event_type.==unique_type[2]] 
         rainclouds!(ax2, fill(2.0, length(y)),y,color=_colors[2], markersize=5px, plot_boxplots=false, gap=0.3)
         ax2.xticklabelsvisible = false
         colsize!(fig.layout, 2, Relative(0.05))
