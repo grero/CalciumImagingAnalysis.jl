@@ -357,6 +357,9 @@ function plot_evalues!(ax, evalues::Vector{T}, timestamps::Vector{TP},etype::Abs
     end
 end
 
+format_label(l::AbstractString) = l
+format_label(l::AbstractString...) = join(strip.(l), ",") 
+
 function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event::Vector{ZonedDateTime}, event_type::AbstractVector{T2};do_animate=false,animation_speed=1,moviefile::Union{String,Nothing}=nothing) where T <: Real where T2
     _etypes = unique(event_type)
     _etypes = sort(_etypes,by=a->length(a))
