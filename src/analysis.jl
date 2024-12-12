@@ -1,26 +1,14 @@
-using Makie
-using GLMakie
-using NanoDates
-using TimesDates
-using Dates
-using TimeZones
-using LinearAlgebra
-using MultivariateStats
-using CSV
-using StatsBase
-using DataFrames
-
 plot_theme = theme_minimal()
 plot_theme.Axis.xticksvisible[] = true
 plot_theme.Axis.yticksvisible[] = true
 
 
-function get_cell_data(cdata::DataFrame)
+function get_cell_data(cdata::DataFrame;filter_accepted=true)
     nrows,ncols = size(cdata)
-    cell_data = zeros(nrows-1, ncols-1)
+    cell_data = zeros(nrows-1, ncols)
     k = 1
-    for col in eachcol(cdata)
-        if col[1] == " accepted"
+    for col in eachcol(cdata)[2:end]
+        if !filter_accepted || col[1] == " accepted"
             cell_data[:,k] = parse.(Float64, col[2:end])
             k += 1
         end
@@ -28,18 +16,15 @@ function get_cell_data(cdata::DataFrame)
     cell_data[:,1:k-1]
 end
 
-function get_cell_data(fname::String)
+function get_cell_data(fname::String;kwargs...)
     cdata = CSV.read(fname,DataFrame;header=1)
     if all(isdigit, cdata[!, " "][2])
         _timestamps = parse.(UInt64, cdata[!, " "][2:end])
     else
         _timestamps = parse.(Float64, cdata[!, " "][2:end])
     end
-    # timestamps are recorded at 100ms, but only with 1s precision, so we need to convert
-    # them to their actual precision
     timestamps = ZonedDateTime.(unix2datetime.(rescale_time(_timestamps)), tz"UTC")
-    # convert to UTC
-    cell_data = get_cell_data(cdata)
+    cell_data = get_cell_data(cdata;kwargs...)
     cell_data, timestamps
 end
 
@@ -203,10 +188,7 @@ function train_decoder(Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
     lda = fit(LinearDiscriminant, Zp, Zn;covestimator=SimpleCovariance())
 end
 
-function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime}, poke_type::AbstractVector{T2}) where T <: Real where T2
-    unique_pokes = unique(poke_type)
-    sort!(unique_pokes)
-    # identify breaks
+function get_subspace(X::Matrix{T}, timestamps::Vector{T2}, poke_time::Vector{T2};kwargs...) where T2 <: ZonedDateTime where T <: Real
     breaks = findall(diff(timestamps).>Second(5))
     bidx = [0;breaks;length(timestamps)]
     Xd = zeros(T,size(X,2),length(poke_time))
@@ -225,7 +207,26 @@ function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vect
         Y[b1+1:b2,:] .-= mean(X[b1+1:b2,:],dims=1)
     end
     # get a subspace spanning 50% (arbitrary)
-    w,s,cc = get_subspace(Xd)
+    w,s,cc = get_subspace(Xd;kwargs...)
+    w, s, Xd, Y
+end
+
+"""
+Finds the optimum alignment of w_2 to w_1
+"""
+function align_subspaces(w_1, w_2)
+    CC = w_1*w_2'
+    u,s,v = svd(CC)
+    R = u*v'
+    R 
+end
+
+function train_decoder(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime}, poke_type::AbstractVector{T2};kwargs...) where T <: Real where T2
+    unique_pokes = unique(poke_type)
+    sort!(unique_pokes)
+    # identify breaks
+    w,s,Xd,Y = get_subspace(X, timestamps, poke_time;kwargs...) 
+    # this is the subspace that we need to match
     jmax = min(10, size(w,2))
     w = w[:,1:jmax]
     Xp = Xd[:,poke_type.==unique_pokes[1]]
@@ -233,11 +234,34 @@ function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vect
     Zp = w'*Xp
     Zn = w'*Xn
     lda = fit(LinearDiscriminant, Zp, Zn)
+    w,lda,Xd,Y
+end
+
+function decode(X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime}, poke_type::AbstractVector{T2};kwargs...) where T <: Real where T2
+    unique_pokes = unique(poke_type)
+    sort!(unique_pokes)
+    w,lda,Xd,Y = train_decoder(X, timestamps, poke_time, poke_type;kwargs...)
+    Xp = Xd[:,poke_type.==unique_pokes[1]]
+    Xn = Xd[:, poke_type.==unique_pokes[2]] 
+    Zp = w'*Xp
+    Zn = w'*Xn
     cq_p = predict(lda, Zp)
     cq_n = predict(lda, Zn)
     @show mean(cq_p) mean(cq_n.==0)
     Z = Y*w
     q = evaluate(lda, permutedims(Z))
+end
+
+function decode(w_train::Matrix{T}, lda, X::Matrix{T}, timestamps::Vector{ZonedDateTime}, poke_time::Vector{ZonedDateTime};kwargs...) where T <: Real
+    w,s,Xd,Y = get_subspace(X, timestamps, poke_time;kwargs...) 
+    if size(w,2) > size(w_train,2)
+        w = w[:,1:size(w_train,2)]
+    end
+    # first align activity in `X` to the subspace spanned by w_train
+    R = align_subspaces(w_train, w)
+    Z = w_train'*R*permutedims(Y)
+    # now evaluate in this subspace
+    evaluate(lda, Z)
 end
 
 function plot_decoder(lda, Zp::Matrix{T}, Zn::Matrix{T}) where T <: Real
@@ -333,9 +357,7 @@ end
 function plot_evalues!(ax, evalues::Vector{T}, timestamps::Vector{TP},etype::AbstractVector{T2};show_legend=false) where T <: Real where T2 where TP <: Period
 
     _colors = Makie.wong_colors()
-    #_etypes = unique(etype)
-    #etypes = sort(_etypes,by=a->length(a))
-    etypes = ["Left","Right"]
+    etypes = unique(etype)
     event_color = fill(_colors[1], length(etype))
     for (i,et) in enumerate(etypes[2:end])
         event_color[etype.==et] .= _colors[i+1]
@@ -358,7 +380,7 @@ function plot_evalues!(ax, evalues::Vector{T}, timestamps::Vector{TP},etype::Abs
 end
 
 format_label(l::AbstractString) = l
-format_label(l::AbstractString...) = join(strip.(l), ",") 
+format_label(l::NTuple{N,Any}) where N = join(strip.(l), ",") 
 
 function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event::Vector{ZonedDateTime}, event_type::AbstractVector{T2};do_animate=false,animation_speed=1,moviefile::Union{String,Nothing}=nothing) where T <: Real where T2
     _etypes = unique(event_type)
@@ -382,16 +404,9 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
         _event[eidx] .+= Δt
     end
     # check that nothing changed
-    evalues = zeros(T, length(event))
-    for (ii,ee) in enumerate(event)
-        idx = searchsortedfirst(timestamps, ee)
-        evalues[ii] = X[idx]
-    end
-    evalues_shifted = zeros(T, length(event))
-    for (ii,ee) in enumerate(_event)
-        idx = searchsortedfirst(_timestamps, ee)
-        evalues_shifted[ii] = X[idx]
-    end
+    evalues = extract_event(X, timestamps, event)
+    evalues_shifted = extract_event(X, _timestamps, _event)
+
     @assert evalues ≈ evalues_shifted
     bidx = [0;breaks;length(timestamps)]
     # convert to seconds since Makie doesn't really handle dates very well    
@@ -427,7 +442,7 @@ function plot_timeseries(X::Vector{T}, timestamps::Vector{ZonedDateTime}, event:
             end
         end
         ll = Legend(fig[1,1], [LineElement(color=c) for c in _colors[1:length(_etypes)]],
-                              _etypes, tellwidth=false, tellheight=false, valign=:top, 
+                              format_label.(_etypes), tellwidth=false, tellheight=false, valign=:top, 
                               halign=:left,framevisible=true,margin=(10,10,10,10))
 
         ax.ylabel = "Decision function"
