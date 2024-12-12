@@ -45,7 +45,7 @@ function get_behavioural_data(fname::String;do_correct_time_zone=true)
         ztd = ZonedDateTime.(event_time .+ Hour(8), tz"Asia/Singapore")
         ztd = astimezone.(ztd, tz"UTC")
     else
-        ztd = ZonedDateTime(event_time, tz"UTC")
+        ztd = ZonedDateTime.(event_time, tz"UTC")
     end
     # get the pokes
     poke_event_idx = findall(x->ifelse(ismissing(x), false, isfinite(x)), bdata[!, "Poke_Time"])
