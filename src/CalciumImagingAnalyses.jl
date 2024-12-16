@@ -1,6 +1,5 @@
 module CalciumImagingAnalyses
 using Makie
-using NanoDates
 using TimesDates
 using Dates
 using TimeZones
