@@ -20,7 +20,7 @@ where \<path to respository\> should be replaced with the actual path, for examp
 See [this notebook](notebooks/usage.ipynb) for usage examples.
 
 ### From python
-Thanks to the excellent PythonCall julia packace and the JuliaCall python package, you can call the functions from this Julia package also from python.
+Thanks to the excellent [PythonCall](https://github.com/JuliaPy/PythonCall.jl) julia packace and the JuliaCall python package, you can call the functions from this Julia package also from python.
 
 First, install the JuliaCall package into your current python envionment
 
